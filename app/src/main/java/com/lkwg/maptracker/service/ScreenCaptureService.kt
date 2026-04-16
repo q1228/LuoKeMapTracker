@@ -75,6 +75,10 @@ class ScreenCaptureService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        // 🔥 安卓12+ 必须加这一行，否则服务直接崩溃
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            setForegroundServiceType(FOREGROUND_SERVICE_MEDIA_PROJECTION)
+        }
         createNotificationChannel()
         getScreenMetrics()
     }
@@ -97,7 +101,7 @@ class ScreenCaptureService : Service() {
             startLoop()
         }
 
-        return START_NOT_STICKY
+        return START_STICKY // 🔥 修复：防止服务被系统杀死
     }
 
     private fun getScreenMetrics() {
@@ -112,7 +116,7 @@ class ScreenCaptureService : Service() {
     private fun setupCapture() {
         imageReader = ImageReader.newInstance(
             screenWidth, screenHeight,
-            PixelFormat.RGBA_8888, 2
+            PixelFormat.RGBA_8888, 3 // 🔥 修复：增加缓存，防止卡顿
         )
 
         virtualDisplay = mediaProjection?.createVirtualDisplay(
@@ -197,7 +201,6 @@ class ScreenCaptureService : Service() {
         consecutiveFails++
         when {
             consecutiveFails < 3 -> {
-                // 短暂丢失，保持位置
                 broadcastResult(MapMatcher.MatchResult(lastKnownX, lastKnownY, 0.1f, 0.0))
             }
             consecutiveFails < 8 -> {
@@ -210,9 +213,6 @@ class ScreenCaptureService : Service() {
         }
     }
 
-    /**
-     * 从 ImageReader 截取帧并裁剪小地图区域
-     */
     private fun captureFrame(): Bitmap? {
         val image: Image = imageReader?.acquireLatestImage() ?: return null
 
@@ -230,7 +230,6 @@ class ScreenCaptureService : Service() {
             )
             fullBitmap.copyPixelsFromBuffer(buffer)
 
-            // 裁剪小地图区域
             val rect = ConfigManager.getMinimapRect(this)
             val x = rect[0].coerceIn(0, fullBitmap.width - 1)
             val y = rect[1].coerceIn(0, fullBitmap.height - 1)
@@ -286,8 +285,6 @@ class ScreenCaptureService : Service() {
         mediaProjection = null
         stopSelf()
     }
-
-    // ─── 通知 ──────────────────────────────────────────
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
