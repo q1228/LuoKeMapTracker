@@ -24,6 +24,7 @@ class GameDetector(private val context: Context) {
             "com.tencent.洛克王国",        // 备用
             "com.tencent.LoKeWang",      // 英文名
             "com.rlk.game",              // 其他可能
+            "com.tencent.nrc"          // ← 加上这一行！
         )
         val GAME_KEYWORDS = setOf("洛克", "lkworld", "lkworld", "洛克王国", "lk5")
 
