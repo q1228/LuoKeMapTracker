@@ -17,16 +17,16 @@ class GameDetector(private val context: Context) {
 
     companion object {
         private const val TAG = "GameDetector"
-        // 洛克王国世界可能的包名
+        // 洛克王国世界可能的包名（已包含你正确的包名）
         val GAME_PACKAGES = setOf(
-            "com.tencent.lkworld",       // 洛克王国世界
-            "com.tencent.lk5",           // 洛克王国5
-            "com.tencent.洛克王国",        // 备用
-            "com.tencent.LoKeWang",      // 英文名
-            "com.rlk.game",              // 其他可能
-            "com.tencent.nrc"          // ← 加上这一行！
+            "com.tencent.lkworld",
+            "com.tencent.lk5",
+            "com.tencent.洛克王国",
+            "com.tencent.LoKeWang",
+            "com.rlk.game",
+            "com.tencent.nrc"  // <-- 你的游戏正确包名
         )
-        val GAME_KEYWORDS = setOf("洛克", "lkworld", "lkworld", "洛克王国", "lk5")
+        val GAME_KEYWORDS = setOf("洛克", "lkworld", "洛克王国", "lk5")
 
         const val ACTION_GAME_STARTED = "com.lkwg.maptracker.GAME_STARTED"
         const val ACTION_GAME_STOPPED = "com.lkwg.maptracker.GAME_STOPPED"
@@ -38,7 +38,7 @@ class GameDetector(private val context: Context) {
     var onGameStateChanged: ((Boolean) -> Unit)? = null
 
     /**
-     * 启动游戏监控（每 3 秒检查一次）
+     * 启动游戏监控（每 1 秒检查一次，更快更准）
      */
     fun startMonitoring() {
         if (monitorJob?.isActive == true) return
@@ -53,12 +53,11 @@ class GameDetector(private val context: Context) {
                     withContext(Dispatchers.Main) {
                         onGameStateChanged?.invoke(running)
                     }
-                    // 发送广播
                     context.sendBroadcast(Intent(
                         if (running) ACTION_GAME_STARTED else ACTION_GAME_STOPPED
                     ))
                 }
-                delay(3000)
+                delay(1000) // 改为1秒检测一次，更灵敏
             }
         }
     }
@@ -72,24 +71,13 @@ class GameDetector(private val context: Context) {
     fun isGameCurrentlyRunning(): Boolean = isGameRunning
 
     /**
-     * 检测游戏是否在前台
+     * 检测游戏是否在前台（安卓16 专用修复）
      */
     private fun isGameInForeground(): Boolean {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            isGameInForegroundUsageStats()
-        } else {
-            isGameInForegroundActivityManager()
-        }
-    }
-
-    /**
-     * API 29+ 使用 UsageStatsManager
-     */
-    private fun isGameInForegroundUsageStats(): Boolean {
         try {
             val usm = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
             val now = System.currentTimeMillis()
-            val events = usm.queryEvents(now - 5000, now)
+            val events = usm.queryEvents(now - 10000, now) // 查10秒内，更稳
             val event = UsageEvents.Event()
             var lastForegroundPackage: String? = null
 
@@ -101,28 +89,12 @@ class GameDetector(private val context: Context) {
             }
 
             if (lastForegroundPackage != null) {
-                return matchesGamePackage(lastForegroundPackage)
+                val match = GAME_PACKAGES.contains(lastForegroundPackage)
+                Log.d(TAG, "当前前台应用: $lastForegroundPackage, 匹配游戏: $match")
+                return match
             }
         } catch (e: Exception) {
-            Log.w(TAG, "UsageStats 查询失败: ${e.message}")
-        }
-        return false
-    }
-
-    /**
-     * API < 29 使用 ActivityManager（可能不可靠）
-     */
-    @Suppress("DEPRECATION")
-    private fun isGameInForegroundActivityManager(): Boolean {
-        try {
-            val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-            val tasks = am.getRunningTasks(1)
-            if (tasks.isNotEmpty()) {
-                val topPackage = tasks[0].topActivity?.packageName ?: return false
-                return matchesGamePackage(topPackage)
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "ActivityManager 查询失败: ${e.message}")
+            Log.w(TAG, "检测失败: ${e.message}")
         }
         return false
     }
